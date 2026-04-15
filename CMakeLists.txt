@@ -10,9 +10,18 @@
 # defines targets for zqloaderlib and zqloader (console) application
 # includes zqloaderui and the z80 sjasmplus subdirecory projects
 
-cmake_minimum_required(VERSION 3.12)
+cmake_minimum_required(VERSION 3.21)
 
+# Android configuration
+if(NOT CMAKE_SYSTEM_NAME)
+    set(CMAKE_SYSTEM_NAME Android)
+endif()
 
+# Set Android NDK if needed
+if(ANDROID)
+    message(STATUS "Building for Android API Level: ${ANDROID_PLATFORM}")
+    message(STATUS "Android ABI: ${ANDROID_ABI}")
+endif()
 
 project(zqloader VERSION 2.0.0 LANGUAGES CXX)
 
@@ -110,10 +119,33 @@ if (GCC)
     )
 endif()
 
+# Android specific configuration
+if(ANDROID)
+    target_compile_options(${TARGET_LIB} PUBLIC
+        -fPIC
+        -fno-limit-debug-info
+    )
+    # Suppress some warnings for Android NDK
+    target_compile_options(${TARGET_LIB} PUBLIC
+        -Wno-error=format-security
+        -Wno-error=uninitialized
+    )
+endif()
 
-if(UNIX)
+
+if(UNIX AND NOT ANDROID)
     target_link_libraries(${TARGET_LIB} PRIVATE dl pthread)
 endif()
+
+if(ANDROID)
+    # Android uses bionic libc (no separate libdl needed in newer NDKs)
+    target_link_libraries(${TARGET_LIB} PRIVATE log)
+    # Enable shared library build for Android
+    set_target_properties(${TARGET_LIB} PROPERTIES
+        SOVERSION 1
+    )
+endif()
+
 if(WIN32)
     target_link_libraries(${TARGET_LIB} PRIVATE ws2_32 DbgHelp psapi)
 endif()
@@ -121,23 +153,33 @@ endif()
 # include ui/qt application
 add_subdirectory(zqloaderui)
 
-# commandline/console application
-set(SOURCE_EXE main.cpp)
+# commandline/console application (not typically used on Android)
+if(NOT ANDROID)
+    set(SOURCE_EXE main.cpp)
 
-if(MSVC)
-    set(SOURCE_EXE ${SOURCE_EXE}
-    resource/zqloader.rc)
+    if(MSVC)
+        set(SOURCE_EXE ${SOURCE_EXE}
+        resource/zqloader.rc)
+    endif()
+
+    # The console application
+    add_executable(${TARGET_EXE}  ${SOURCE_EXE}  )
+    target_link_libraries(${TARGET_EXE} ${TARGET_LIB})
 endif()
-
-# The console application
-add_executable(${TARGET_EXE}  ${SOURCE_EXE}  )
-target_link_libraries(${TARGET_EXE} ${TARGET_LIB})
 
 
 #installation
 include(GNUInstallDirs)
-install(TARGETS ${TARGET_EXE} ${TARGET_LIB}
-    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-       )
+
+if(ANDROID)
+    # Android installation - libraries go to lib directory
+    install(TARGETS ${TARGET_LIB}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    )
+else()
+    install(TARGETS ${TARGET_EXE} ${TARGET_LIB}
+        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    )
+endif()
 
