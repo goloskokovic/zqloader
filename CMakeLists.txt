@@ -55,7 +55,7 @@ set(SOURCE_LIB
     sampletowav.cpp
     pulsers.cpp
     zqloader.cpp
-
+    zqloader_ffi.cpp
 )
 
 
